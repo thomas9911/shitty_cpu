@@ -1,0 +1,1 @@
+workspace = { members = ["crates/shitty_runtime"], resolver = "2" }
