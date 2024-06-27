@@ -15,10 +15,18 @@ pub enum Command {
     Noop,
     Label,
     Branch,
+    BranchEqual,
+    BranchNotEqual,
     BranchGreaterEqual,
+    BranchGreater,
+    BranchLesser,
+    BranchLesserEqual,
     Compare,
     Move,
     Add,
+    Subtract,
+    Multiply,
+    Divide,
 }
 
 impl Command {}
@@ -157,16 +165,37 @@ impl Runtime {
                     _ => return Err("Invalid argument".to_string()),
                 }
             }
-            Command::Label => {
-                // let label_ref = args[0].resolve_label_or_error(self)?;
-                // self.label_references
-                //     .insert(label_ref, self.program_counter);
-            }
+            Command::Label => {}
             Command::Branch => {
                 self.brancher(args)?;
             }
+            Command::BranchEqual => {
+                if self.flags.equal {
+                    self.brancher(args)?;
+                }
+            }
+            Command::BranchNotEqual => {
+                if !self.flags.equal {
+                    self.brancher(args)?;
+                }
+            }
+            Command::BranchGreater => {
+                if self.flags.greater {
+                    self.brancher(args)?;
+                }
+            }
             Command::BranchGreaterEqual => {
                 if self.flags.equal || self.flags.greater {
+                    self.brancher(args)?;
+                }
+            }
+            Command::BranchLesser => {
+                if self.flags.less {
+                    self.brancher(args)?;
+                }
+            }
+            Command::BranchLesserEqual => {
+                if self.flags.equal || self.flags.less {
                     self.brancher(args)?;
                 }
             }
@@ -192,7 +221,7 @@ impl Runtime {
                     }
                 }
             }
-            Command::Add => {
+            Command::Add | Command::Subtract | Command::Multiply | Command::Divide => {
                 self.calculate(command, args)?;
             }
         }
@@ -217,12 +246,19 @@ impl Runtime {
     }
 
     fn calculate(&mut self, command: &Command, args: &[Argument; 2]) -> Result<(), Error> {
-        let function: fn(u64, u64) -> u64 = match command {
-            Command::Add => Integer::wrapping_add,
+        let function: fn(u64, u64) -> (u64, bool) = match command {
+            Command::Add => Integer::overflowing_add,
+            Command::Subtract => Integer::overflowing_sub,
+            Command::Multiply => Integer::overflowing_mul,
+            Command::Divide => Integer::overflowing_div,
+            // Command::Shiftleft => Integer::overflowing_shl,
+            // Command::Shiftright => Integer::overflowing_shr,
             _ => return Err("Invalid calculate command".to_string()),
         };
 
-        self.registers.data[0] = function(self.registers.data[0], args[0].resolve_or_error(self)?);
+        let (out, overflow) = function(self.registers.data[0], args[0].resolve_or_error(self)?);
+        self.registers.data[0] = out;
+        self.flags.overflow = overflow;
 
         Ok(())
     }
@@ -262,5 +298,31 @@ mod tests {
         rt.run().unwrap();
 
         assert_eq!(10, rt.output())
+    }
+
+    #[test]
+    fn if_statement_test() {
+        let condition_a = 8411;
+        let stop = 8419;
+
+        let prepared_rt = Runtime::new(btreemap! {
+            0 => (Command::Compare, [Argument::Register(0), Argument::Raw(10)]),
+            1 => (Command::BranchGreater, [Argument::RawLabel(condition_a), Argument::None]),
+            2 => (Command::Multiply, [Argument::Raw(5), Argument::None]),
+            3 => (Command::Branch, [Argument::RawLabel(stop), Argument::None]),
+            4 => (Command::Label, [Argument::RawLabel(condition_a), Argument::None]),
+            5 => (Command::Subtract, [Argument::Raw(10), Argument::None]),
+            6 => (Command::Label, [Argument::RawLabel(stop), Argument::None]),
+        });
+
+        let mut rt = prepared_rt.clone();
+        rt.registers.data[0] = 12;
+        rt.run().unwrap();
+        assert_eq!(2, rt.output());
+
+        let mut rt = prepared_rt.clone();
+        rt.registers.data[0] = 8;
+        rt.run().unwrap();
+        assert_eq!(40, rt.output())
     }
 }
