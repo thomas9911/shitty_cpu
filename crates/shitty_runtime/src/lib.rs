@@ -1,44 +1,5 @@
+use shitty_types::{Argument, Command, Error, Heap, Integer, Program};
 use std::{cmp::Ordering, collections::BTreeMap};
-
-pub type Error = String;
-
-pub type Integer = u64;
-pub type RawCommand = u64;
-pub type RawArgument = u64;
-
-pub type RawProgram = Vec<(Integer, RawCommand, RawArgument, RawArgument)>;
-pub type Heap = BTreeMap<Integer, Integer>;
-pub type Program = BTreeMap<Integer, (Command, [Argument; 2])>;
-
-#[derive(Debug, Clone, Copy)]
-pub enum Command {
-    Noop,
-    Label,
-    Branch,
-    BranchEqual,
-    BranchNotEqual,
-    BranchGreaterEqual,
-    BranchGreater,
-    BranchLesser,
-    BranchLesserEqual,
-    Compare,
-    Move,
-    Add,
-    Subtract,
-    Multiply,
-    Divide,
-}
-
-impl Command {}
-
-#[derive(Debug, Clone, Copy)]
-pub enum Argument {
-    None,
-    Raw(Integer),
-    Register(u8),
-    HeapRef(Integer),
-    RawLabel(Integer),
-}
 
 #[derive(Debug, Clone)]
 pub struct Registers {
@@ -59,41 +20,12 @@ pub struct Flags {
     overflow: bool,
 }
 
-impl Argument {
-    pub fn resolve(&self, rt: &Runtime) -> Option<Integer> {
-        match self {
-            Argument::None => None,
-            Argument::Raw(data) => Some(*data),
-            Argument::Register(reg_id) => rt.registers.data.get(*reg_id as usize).copied(),
-            Argument::HeapRef(ref_id) => Some(*rt.heap.get(&ref_id).unwrap()),
-            Argument::RawLabel(_) => None,
-        }
-    }
-
-    pub fn resolve_or_error(&self, rt: &Runtime) -> Result<Integer, Error> {
-        self.resolve(rt)
-            .ok_or_else(|| String::from("no valid argument"))
-    }
-
-    pub fn resolve_label(&self) -> Option<Integer> {
-        match self {
-            Argument::RawLabel(label_ref) => Some(*label_ref),
-            _ => None,
-        }
-    }
-
-    pub fn resolve_label_or_error(&self) -> Result<Integer, Error> {
-        self.resolve_label()
-            .ok_or_else(|| String::from("no valid argument"))
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct Runtime {
     flags: Flags,
     registers: Registers,
     program_counter: Integer,
-    program: BTreeMap<Integer, (Command, [Argument; 2])>,
+    program: Program,
     heap: Heap,
     label_references: BTreeMap<Integer, Integer>,
 }
@@ -123,8 +55,13 @@ impl Runtime {
     }
 
     pub fn run(&mut self) -> Result<(), Error> {
+        let Some((last_line, _)) = self.program.last_key_value() else {
+            return Ok(());
+        };
+        let end = *last_line + 1;
+
         loop {
-            match self.tick() {
+            match self.tick(end) {
                 Ok(true) => break,
                 Ok(false) => (),
                 Err(e) => return Err(e),
@@ -134,17 +71,22 @@ impl Runtime {
         Ok(())
     }
 
-    pub fn tick(&mut self) -> Result<bool, Error> {
+    pub fn tick(&mut self, end: Integer) -> Result<bool, Error> {
+        if self.program_counter >= end {
+            return Ok(true);
+        }
+
         if let Some((command, args)) = self
             .program
             .get(&self.program_counter)
             .map(|(c, [a1, a2])| (*c, [*a1, *a2]))
         {
             self.apply_command(&command, &args)?;
-            return Ok(false);
+        } else {
+            self.program_counter += 1;
         };
 
-        Ok(true)
+        Ok(false)
     }
 
     pub fn apply_command(&mut self, command: &Command, args: &[Argument; 2]) -> Result<(), Error> {
@@ -152,7 +94,7 @@ impl Runtime {
         match command {
             Command::Noop => (),
             Command::Move => {
-                let new_value = args[1].resolve_or_error(self)?;
+                let new_value = self.resolve_argument_or_error(&args[1])?;
 
                 match args[0] {
                     Argument::Register(reg) => self.registers.data[reg as usize] = new_value,
@@ -200,8 +142,8 @@ impl Runtime {
                 }
             }
             Command::Compare => {
-                let value_a = args[0].resolve_or_error(self)?;
-                let value_b = args[1].resolve_or_error(self)?;
+                let value_a = self.resolve_argument_or_error(&args[0])?;
+                let value_b = self.resolve_argument_or_error(&args[1])?;
 
                 match value_a.cmp(&value_b) {
                     Ordering::Equal => {
@@ -235,6 +177,21 @@ impl Runtime {
         self.registers.data[0]
     }
 
+    fn resolve_argument(&self, argument: &Argument) -> Option<Integer> {
+        match argument {
+            Argument::None => None,
+            Argument::Raw(data) => Some(*data),
+            Argument::Register(reg_id) => self.registers.data.get(*reg_id as usize).copied(),
+            Argument::HeapRef(ref_id) => Some(*self.heap.get(&ref_id).unwrap()),
+            Argument::RawLabel(_) => None,
+        }
+    }
+
+    pub fn resolve_argument_or_error(&self, argument: &Argument) -> Result<Integer, Error> {
+        self.resolve_argument(argument)
+            .ok_or_else(|| String::from("no valid argument"))
+    }
+
     fn brancher(&mut self, args: &[Argument; 2]) -> Result<(), Error> {
         let label_ref = args[0].resolve_label_or_error()?;
         self.label_references
@@ -256,7 +213,10 @@ impl Runtime {
             _ => return Err("Invalid calculate command".to_string()),
         };
 
-        let (out, overflow) = function(self.registers.data[0], args[0].resolve_or_error(self)?);
+        let (out, overflow) = function(
+            self.registers.data[0],
+            self.resolve_argument_or_error(&args[0])?,
+        );
         self.registers.data[0] = out;
         self.flags.overflow = overflow;
 
@@ -275,6 +235,19 @@ mod tests {
             0 => (Command::Move, [Argument::Register(0), Argument::Raw(123)]),
             1 => (Command::Move, [Argument::Register(1), Argument::Raw(321)]),
             2 => (Command::Add, [Argument::Register(1), Argument::None]),
+        });
+
+        rt.run().unwrap();
+
+        assert_eq!(444, rt.output())
+    }
+
+    #[test]
+    fn empty_lines_test() {
+        let mut rt = Runtime::new(btreemap! {
+            1 => (Command::Move, [Argument::Register(0), Argument::Raw(123)]),
+            3 => (Command::Move, [Argument::Register(1), Argument::Raw(321)]),
+            7 => (Command::Add, [Argument::Register(1), Argument::None]),
         });
 
         rt.run().unwrap();

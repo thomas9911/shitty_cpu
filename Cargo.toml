@@ -1,1 +1,1 @@
-workspace = { members = ["crates/shitty_runtime"], resolver = "2" }
+workspace = { members = [ "crates/shitty_parser","crates/shitty_runtime", "crates/shitty_types"], resolver = "2" }
