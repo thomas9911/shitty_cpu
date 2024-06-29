@@ -187,6 +187,16 @@ impl Runtime {
         }
     }
 
+    fn resolve_argument_mut(&mut self, argument: &Argument) -> Option<&mut Integer> {
+        match argument {
+            Argument::None => None,
+            Argument::Raw(_data) => None,
+            Argument::Register(reg_id) => self.registers.data.get_mut(*reg_id as usize),
+            Argument::HeapRef(ref_id) => self.heap.get_mut(&ref_id),
+            Argument::RawLabel(_) => None,
+        }
+    }
+
     pub fn resolve_argument_or_error(&self, argument: &Argument) -> Result<Integer, Error> {
         self.resolve_argument(argument)
             .ok_or_else(|| String::from("no valid argument"))
@@ -214,10 +224,13 @@ impl Runtime {
         };
 
         let (out, overflow) = function(
-            self.registers.data[0],
             self.resolve_argument_or_error(&args[0])?,
+            self.resolve_argument_or_error(&args[1])?,
         );
-        self.registers.data[0] = out;
+        // self.registers.data[0] = out;
+        if let Some(pointer) = self.resolve_argument_mut(&args[0]) {
+            *pointer = out;
+        }
         self.flags.overflow = overflow;
 
         Ok(())
@@ -234,7 +247,7 @@ mod tests {
         let mut rt = Runtime::new(btreemap! {
             0 => (Command::Move, [Argument::Register(0), Argument::Raw(123)]),
             1 => (Command::Move, [Argument::Register(1), Argument::Raw(321)]),
-            2 => (Command::Add, [Argument::Register(1), Argument::None]),
+            2 => (Command::Add, [Argument::Register(0), Argument::Register(1)]),
         });
 
         rt.run().unwrap();
@@ -247,7 +260,7 @@ mod tests {
         let mut rt = Runtime::new(btreemap! {
             1 => (Command::Move, [Argument::Register(0), Argument::Raw(123)]),
             3 => (Command::Move, [Argument::Register(1), Argument::Raw(321)]),
-            7 => (Command::Add, [Argument::Register(1), Argument::None]),
+            7 => (Command::Add, [Argument::Register(0), Argument::Register(1)]),
         });
 
         rt.run().unwrap();
@@ -261,7 +274,7 @@ mod tests {
         let stop = 666;
         let mut rt = Runtime::new(btreemap! {
             0 => (Command::Label, [Argument::RawLabel(start), Argument::None]),
-            1 => (Command::Add, [Argument::Raw(1), Argument::None]),
+            1 => (Command::Add, [Argument::Register(0), Argument::Raw(1)]),
             2 => (Command::Compare, [Argument::Register(0), Argument::Raw(10)]),
             3 => (Command::BranchGreaterEqual, [Argument::RawLabel(stop), Argument::None]),
             4 => (Command::Branch, [Argument::RawLabel(start), Argument::None]),
@@ -281,10 +294,10 @@ mod tests {
         let prepared_rt = Runtime::new(btreemap! {
             0 => (Command::Compare, [Argument::Register(0), Argument::Raw(10)]),
             1 => (Command::BranchGreater, [Argument::RawLabel(condition_a), Argument::None]),
-            2 => (Command::Multiply, [Argument::Raw(5), Argument::None]),
+            2 => (Command::Multiply, [Argument::Register(0), Argument::Raw(5)]),
             3 => (Command::Branch, [Argument::RawLabel(stop), Argument::None]),
             4 => (Command::Label, [Argument::RawLabel(condition_a), Argument::None]),
-            5 => (Command::Subtract, [Argument::Raw(10), Argument::None]),
+            5 => (Command::Subtract, [Argument::Register(0), Argument::Raw(10)]),
             6 => (Command::Label, [Argument::RawLabel(stop), Argument::None]),
         });
 

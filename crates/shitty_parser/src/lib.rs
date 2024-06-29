@@ -101,7 +101,7 @@ fn parse_simple_program() {
     let input = r#"
     mov r0 #7
     mov r1 #2
-    add r1
+    add r0 r1
     "#;
 
     let program = parse_from_str(input).unwrap();
@@ -111,7 +111,7 @@ fn parse_simple_program() {
         maplit::btreemap! {
             1 => (Command::Move, [Argument::Register(0), Argument::Raw(7)]),
             2 => (Command::Move, [Argument::Register(1), Argument::Raw(2)]),
-            3 => (Command::Add, [Argument::Register(1), Argument::None]),
+            3 => (Command::Add, [Argument::Register(0), Argument::Register(1)]),
         }
     );
 }
@@ -120,10 +120,10 @@ fn parse_simple_program() {
 fn parse_program_with_labels() {
     let input = r#"cmp r0 #10
     bgr :condition_a
-    mul #5
+    mul r0 #5
     b :stop
 condition_a:
-    sub #10
+    sub r0 #10
 stop:
     "#;
 
@@ -136,10 +136,10 @@ stop:
         maplit::btreemap! {
             0 => (Command::Compare, [Argument::Register(0), Argument::Raw(10)]),
             1 => (Command::BranchGreater, [Argument::RawLabel(condition_a), Argument::None]),
-            2 => (Command::Multiply, [Argument::Raw(5), Argument::None]),
+            2 => (Command::Multiply, [Argument::Register(0), Argument::Raw(5)]),
             3 => (Command::Branch, [Argument::RawLabel(stop), Argument::None]),
             4 => (Command::Label, [Argument::RawLabel(condition_a), Argument::None]),
-            5 => (Command::Subtract, [Argument::Raw(10), Argument::None]),
+            5 => (Command::Subtract, [Argument::Register(0), Argument::Raw(10)]),
             6 => (Command::Label, [Argument::RawLabel(stop), Argument::None]),
         }
     );
