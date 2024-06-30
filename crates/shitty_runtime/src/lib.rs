@@ -27,6 +27,7 @@ pub struct Runtime {
     program_counter: Integer,
     program: Program,
     heap: Heap,
+    stack: Vec<Integer>,
     label_references: BTreeMap<Integer, Integer>,
 }
 
@@ -36,6 +37,7 @@ impl Runtime {
             flags: Flags::default(),
             registers: Registers::new(),
             heap: Heap::new(),
+            stack: Vec::new(),
             program_counter: 0,
             label_references: Self::scan_labels(&program),
             program,
@@ -165,6 +167,29 @@ impl Runtime {
             }
             Command::Add | Command::Subtract | Command::Multiply | Command::Divide => {
                 self.calculate(command, args)?;
+            }
+            Command::Push => {
+                let value = self.resolve_argument_or_error(&args[0])?;
+                self.stack.push(value);
+            }
+            Command::Pop => {
+                if let Some(value) = self.stack.pop() {
+                    if let Some(pointer) = self.resolve_argument_mut(&args[0]) {
+                        *pointer = value;
+                    }
+                }
+            }
+            Command::Call => {
+                self.stack.push(self.program_counter);
+                self.brancher(args)?;
+            }
+            Command::Return => {
+                if let Some(value) = self.stack.pop() {
+                    self.program_counter = value;
+                } else {
+                    // error or ignore?
+                    // return Err("Stack underflow".to_string());
+                }
             }
         }
 
@@ -310,5 +335,54 @@ mod tests {
         rt.registers.data[0] = 8;
         rt.run().unwrap();
         assert_eq!(40, rt.output())
+    }
+
+    #[test]
+    fn push_pop_test() {
+        let mut rt = Runtime::new(btreemap! {
+            0 => (Command::Move, [Argument::Register(0), Argument::Raw(15)]),
+            1 => (Command::Push, [Argument::Register(0), Argument::None]),
+            2 => (Command::Move, [Argument::Register(0), Argument::Raw(11)]),
+            3 => (Command::Push, [Argument::Register(0), Argument::None]),
+            4 => (Command::Move, [Argument::Register(0), Argument::Raw(9)]),
+            5 => (Command::Push, [Argument::Register(0), Argument::None]),
+            6 => (Command::Pop, [Argument::Register(2), Argument::None]),
+            7 => (Command::Pop, [Argument::Register(1), Argument::None]),
+        });
+
+        rt.run().unwrap();
+
+        assert_eq!(rt.registers.data[2], 9);
+        assert_eq!(rt.registers.data[1], 11);
+        assert_eq!(rt.stack, vec![15])
+    }
+
+    #[test]
+    fn call_return_test() {
+        let add_one = 8411;
+        let end = 18427;
+
+        let mut rt = Runtime::new(btreemap! {
+            //   mov r0 15
+            0 => (Command::Move, [Argument::Register(0), Argument::Raw(15)]),
+            //   call :add_one
+            1 => (Command::Call, [Argument::RawLabel(add_one), Argument::None]),
+            //   mul r0 7
+            2 => (Command::Multiply, [Argument::Register(0), Argument::Raw(7)]),
+            //   b :end
+            3 => (Command::Branch, [Argument::RawLabel(end), Argument::None]),
+            // add_one:
+            4 => (Command::Label, [Argument::RawLabel(add_one), Argument::None]),
+            //   add r0 100
+            5 => (Command::Add, [Argument::Register(0), Argument::Raw(100)]),
+            //   ret
+            6 => (Command::Return, [Argument::None, Argument::None]),
+            // end:
+            7 => (Command::Label, [Argument::RawLabel(end), Argument::None]),
+        });
+
+        rt.run().unwrap();
+
+        assert_eq!(805, rt.output());
     }
 }

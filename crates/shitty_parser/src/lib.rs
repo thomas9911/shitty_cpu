@@ -24,8 +24,16 @@ pub fn parse(input: impl BufRead) -> Result<Program, Error> {
                 "mul" => Command::Multiply,
                 "div" => Command::Divide,
                 "bgr" => Command::BranchGreater,
+                "bge" => Command::BranchGreaterEqual,
+                "bl" => Command::BranchLesser,
+                "ble" => Command::BranchLesserEqual,
+                "beq" => Command::BranchEqual,
+                "bne" => Command::BranchNotEqual,
                 "b" => Command::Branch,
                 "cmp" => Command::Compare,
+                "call" => Command::Call,
+                "push" => Command::Push,
+                "pop" => Command::Pop,
                 _ => return Err(format!("unknown command {}", command)),
             };
             let mut args = [Argument::None, Argument::None];
@@ -72,15 +80,27 @@ pub fn parse(input: impl BufRead) -> Result<Program, Error> {
             }
             program.insert(index, (command, args));
         } else {
-            let line = line.trim().trim_end_matches(':');
-            if !line.is_empty() {
-                program.insert(
-                    index,
-                    (
-                        Command::Label,
-                        [Argument::RawLabel(hash_label(line)), Argument::None],
-                    ),
-                );
+            if line.trim().ends_with(':') {
+                let line = line.trim().trim_end_matches(':');
+                if !line.is_empty() {
+                    program.insert(
+                        index,
+                        (
+                            Command::Label,
+                            [Argument::RawLabel(hash_label(line)), Argument::None],
+                        ),
+                    );
+                }
+            } else {
+                // zero argument commands
+                let command = match line.trim() {
+                    "ret" => Some(Command::Return),
+                    "" => None,
+                    _ => return Err(format!("unknown command {}", line)),
+                };
+                if let Some(command) = command {
+                    program.insert(index, (command, [Argument::None, Argument::None]));
+                }
             }
         }
         index += 1;
@@ -141,6 +161,37 @@ stop:
             4 => (Command::Label, [Argument::RawLabel(condition_a), Argument::None]),
             5 => (Command::Subtract, [Argument::Register(0), Argument::Raw(10)]),
             6 => (Command::Label, [Argument::RawLabel(stop), Argument::None]),
+        }
+    );
+}
+
+#[test]
+fn parse_program_with_calls() {
+    let input = r#"mov r0 #15
+    call :add_one
+    mul r0 #7
+    b :end
+add_one:
+    add r0 #100
+    ret
+end:
+    "#;
+
+    let program = parse_from_str(input).unwrap();
+    let add_one = 15338766068606827303;
+    let end = 1666831356574994304;
+
+    assert_eq!(
+        program,
+        maplit::btreemap! {
+            0 => (Command::Move, [Argument::Register(0), Argument::Raw(15)]),
+            1 => (Command::Call, [Argument::RawLabel(add_one), Argument::None]),
+            2 => (Command::Multiply, [Argument::Register(0), Argument::Raw(7)]),
+            3 => (Command::Branch, [Argument::RawLabel(end), Argument::None]),
+            4 => (Command::Label, [Argument::RawLabel(add_one), Argument::None]),
+            5 => (Command::Add, [Argument::Register(0), Argument::Raw(100)]),
+            6 => (Command::Return, [Argument::None, Argument::None]),
+            7 => (Command::Label, [Argument::RawLabel(end), Argument::None]),
         }
     );
 }

@@ -27,6 +27,10 @@ pub enum Command {
     Subtract,
     Multiply,
     Divide,
+    Push,
+    Pop,
+    Call,
+    Return,
 }
 
 impl Command {}
