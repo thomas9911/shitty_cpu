@@ -1,0 +1,13 @@
+[package]
+name = "shitty_cli"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+pico-args = "0.5.0"
+shitty_parser = { path = "../shitty_parser" }
+shitty_types = { path = "../shitty_types" }
+shitty_runtime = { path = "../shitty_runtime" }
+anyhow = "1.0.86"
