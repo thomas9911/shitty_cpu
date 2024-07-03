@@ -34,16 +34,21 @@ pub fn parse(input: impl BufRead) -> Result<Program, Error> {
                 "call" => Command::Call,
                 "push" => Command::Push,
                 "pop" => Command::Pop,
+                x if x.ends_with(':') => Command::LabelledData(hash_label(x.trim_end_matches(':'))),
                 _ => return Err(format!("unknown command {}", command)),
             };
             let mut args = [Argument::None, Argument::None];
             let mut arg_index = 0;
-            for raw_arg in raw_args.split(' ').filter(|part| !part.is_empty()) {
+            let vec_raw_args: Vec<_> = raw_args
+                .split(' ')
+                .filter(|part| !part.is_empty())
+                .collect();
+            for raw_arg in vec_raw_args.iter() {
                 if arg_index >= 2 {
                     return Err(format!("too many arguments for command {:?}", command));
                 }
 
-                args[arg_index] = match raw_arg {
+                args[arg_index] = match *raw_arg {
                     "r0" => Argument::Register(0),
                     "r1" => Argument::Register(1),
                     "r2" => Argument::Register(2),
@@ -60,6 +65,12 @@ pub fn parse(input: impl BufRead) -> Result<Program, Error> {
                     "r13" => Argument::Register(13),
                     "r14" => Argument::Register(14),
                     "r15" => Argument::Register(15),
+                    "db" => {
+                        arg_index += 1;
+                        let db_argument = (vec_raw_args[1..]).join(" ");
+                        args[0] = Argument::Literal(parse_db_literal(&db_argument)?);
+                        continue;
+                    }
                     x if x.starts_with("#") => {
                         let Some((_, rest)) = x.split_once('#') else {
                             return Err(format!(
@@ -74,7 +85,8 @@ pub fn parse(input: impl BufRead) -> Result<Program, Error> {
                         let (_, label) = x.split_once(':').unwrap();
                         Argument::RawLabel(hash_label(label))
                     }
-                    _ => return Err(format!("unknown argument {}", raw_arg)),
+                    // _ => return Err(format!("unknown argument {}", raw_arg)),
+                    _ => Argument::None,
                 };
                 arg_index += 1;
             }
@@ -109,11 +121,38 @@ pub fn parse(input: impl BufRead) -> Result<Program, Error> {
     Ok(program)
 }
 
+// fn parse_command(input: &str) -> Result<Program, Error> {
+
+// }
+
 fn hash_label(label: &str) -> u64 {
     let mut hasher = DefaultHasher::new();
     label.hash(&mut hasher);
     let hash = hasher.finish();
     hash
+}
+
+fn parse_db_literal(input: &str) -> Result<String, Error> {
+    let mut output = String::new();
+    for item in input.split(',') {
+        let data: tinyjson::JsonValue = item
+            .trim()
+            .parse()
+            .map_err(|e: tinyjson::JsonParseError| e.to_string())?;
+        match data {
+            tinyjson::JsonValue::String(x) => output.push_str(&x),
+            tinyjson::JsonValue::Number(x) => {
+                if let Some(ch) = char::from_u32(x as u32) {
+                    output.push(ch)
+                } else {
+                    return Err(String::from("invalid char"));
+                }
+            }
+            _ => return Err(String::from("invalid literal item")),
+        }
+    }
+
+    Ok(output)
 }
 
 #[test]
@@ -192,6 +231,25 @@ end:
             5 => (Command::Add, [Argument::Register(0), Argument::Raw(100)]),
             6 => (Command::Return, [Argument::None, Argument::None]),
             7 => (Command::Label, [Argument::RawLabel(end), Argument::None]),
+        }
+    );
+}
+
+#[test]
+fn parse_program_with_string() {
+    let input = r#"
+data_str: db "Hallo",0,98
+    mov r0 :data_str
+    "#;
+
+    let program = parse_from_str(input).unwrap();
+    let data_str = 12529907765057034586;
+
+    assert_eq!(
+        program,
+        maplit::btreemap! {
+            1 => (Command::LabelledData(data_str), [Argument::Literal("Hallo\0b".to_string()), Argument::None]),
+            2 => (Command::Move, [Argument::Register(0), Argument::RawLabel(data_str)]),
         }
     );
 }

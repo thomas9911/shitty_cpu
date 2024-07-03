@@ -10,10 +10,11 @@ pub type RawProgram = Vec<(Integer, RawCommand, RawArgument, RawArgument)>;
 pub type Heap = BTreeMap<Integer, Integer>;
 pub type Program = BTreeMap<Integer, (Command, [Argument; 2])>;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Command {
     Noop,
     Label,
+    LabelledData(Integer),
     Branch,
     BranchEqual,
     BranchNotEqual,
@@ -35,13 +36,14 @@ pub enum Command {
 
 impl Command {}
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Argument {
     None,
     Raw(Integer),
     Register(u8),
     HeapRef(Integer),
     RawLabel(Integer),
+    Literal(String),
 }
 
 impl Argument {

@@ -81,7 +81,7 @@ impl Runtime {
         if let Some((command, args)) = self
             .program
             .get(&self.program_counter)
-            .map(|(c, [a1, a2])| (*c, [*a1, *a2]))
+            .map(|(c, [a1, a2])| (c.clone(), [a1.clone(), a2.clone()]))
         {
             self.apply_command(&command, &args)?;
         } else {
@@ -191,6 +191,7 @@ impl Runtime {
                     // return Err("Stack underflow".to_string());
                 }
             }
+            Command::LabelledData(_) => {}
         }
 
         self.program_counter += increase_program_counter as Integer;
@@ -209,6 +210,7 @@ impl Runtime {
             Argument::Register(reg_id) => self.registers.data.get(*reg_id as usize).copied(),
             Argument::HeapRef(ref_id) => Some(*self.heap.get(&ref_id).unwrap()),
             Argument::RawLabel(_) => None,
+            Argument::Literal(_) => todo!(),
         }
     }
 
@@ -219,6 +221,7 @@ impl Runtime {
             Argument::Register(reg_id) => self.registers.data.get_mut(*reg_id as usize),
             Argument::HeapRef(ref_id) => self.heap.get_mut(&ref_id),
             Argument::RawLabel(_) => None,
+            Argument::Literal(_) => todo!(),
         }
     }
 

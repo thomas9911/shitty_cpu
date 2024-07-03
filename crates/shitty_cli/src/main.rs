@@ -12,13 +12,12 @@ fn main() -> Result<(), anyhow::Error> {
         _ => println!("Invalid command"),
     };
 
-
     Ok(())
 }
 
 fn run(args: &mut Arguments) -> Result<(), anyhow::Error> {
     let file: PathBuf = args.free_from_str()?;
-    let mut file =  File::open(file)?;
+    let mut file = File::open(file)?;
     let input = BufReader::new(&mut file);
     let program = shitty_parser::parse(input).map_err(|e| anyhow::anyhow!("{}", e))?;
     let mut rt = shitty_runtime::Runtime::new(program);
