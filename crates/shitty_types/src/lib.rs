@@ -7,7 +7,7 @@ pub type RawCommand = u64;
 pub type RawArgument = u64;
 
 pub type RawProgram = Vec<(Integer, RawCommand, RawArgument, RawArgument)>;
-pub type Heap = BTreeMap<Integer, Integer>;
+pub type Heap = Vec<Vec<Integer>>;
 pub type Program = BTreeMap<Integer, (Command, [Argument; 2])>;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -43,7 +43,8 @@ pub enum Argument {
     Register(u8),
     HeapRef(Integer),
     RawLabel(Integer),
-    Literal(String),
+    Literal(Vec<Integer>),
+    HeapDeref(Integer, Integer),
 }
 
 impl Argument {

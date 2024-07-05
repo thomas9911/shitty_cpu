@@ -1,9 +1,10 @@
 use std::{
     hash::{DefaultHasher, Hash, Hasher},
     io::{BufRead, BufReader, Cursor},
+    num::ParseIntError,
 };
 
-use shitty_types::{Argument, Command, Error, Program};
+use shitty_types::{Argument, Command, Error, Integer, Program};
 
 pub fn parse_from_str(input: &str) -> Result<Program, Error> {
     let cursor = Cursor::new(input);
@@ -39,10 +40,32 @@ pub fn parse(input: impl BufRead) -> Result<Program, Error> {
             };
             let mut args = [Argument::None, Argument::None];
             let mut arg_index = 0;
-            let vec_raw_args: Vec<_> = raw_args
-                .split(' ')
-                .filter(|part| !part.is_empty())
-                .collect();
+            // let vec_raw_args: Vec<_> = raw_args
+            //     .split(' ')
+            //     .filter(|part| !part.is_empty())
+            //     .collect();
+            let mut vec_raw_args = Vec::new();
+
+            // let asdf = raw_args.replace("  ", " ").split_once(" ").map(|(x, y)| (x, y.split_once(" ")));
+            let replaced_args = raw_args.replace("  ", " ");
+            match replaced_args.split_once(" ") {
+                Some((x, y)) => {
+                    vec_raw_args.push(x.trim());
+                    match y.split_once(" ") {
+                        Some((a, b)) => {
+                            vec_raw_args.push(a.trim());
+                            vec_raw_args.push(b.trim());
+                        }
+                        None => {
+                            vec_raw_args.push(y.trim());
+                        }
+                    }
+                }
+                None => {
+                    vec_raw_args.push(replaced_args.trim());
+                }
+            }
+
             for raw_arg in vec_raw_args.iter() {
                 if arg_index >= 2 {
                     return Err(format!("too many arguments for command {:?}", command));
@@ -82,8 +105,22 @@ pub fn parse(input: impl BufRead) -> Result<Program, Error> {
                         Argument::Raw(rest.parse().unwrap())
                     }
                     x if x.split_once(':').is_some() => {
-                        let (_, label) = x.split_once(':').unwrap();
-                        Argument::RawLabel(hash_label(label))
+                        dbg!(&x);
+                        // let (_, label) = x.split_once(':').unwrap();
+                        // Argument::RawLabel(hash_label(label))
+                        match x.split_once(':').unwrap() {
+                            ("[", label) => {
+                                let label_with_offset = label.trim_end_matches(']');
+                                match label_with_offset.split_once('+') {
+                                    Some((label, offset)) => Argument::HeapDeref(
+                                        hash_label(label),
+                                        offset.parse().map_err(|e: ParseIntError| e.to_string())?,
+                                    ),
+                                    None => Argument::HeapDeref(hash_label(label_with_offset), 0),
+                                }
+                            }
+                            (_, label) => Argument::RawLabel(hash_label(label)),
+                        }
                     }
                     // _ => return Err(format!("unknown argument {}", raw_arg)),
                     _ => Argument::None,
@@ -132,22 +169,16 @@ fn hash_label(label: &str) -> u64 {
     hash
 }
 
-fn parse_db_literal(input: &str) -> Result<String, Error> {
-    let mut output = String::new();
+fn parse_db_literal(input: &str) -> Result<Vec<Integer>, Error> {
+    let mut output = Vec::new();
     for item in input.split(',') {
         let data: tinyjson::JsonValue = item
             .trim()
             .parse()
             .map_err(|e: tinyjson::JsonParseError| e.to_string())?;
         match data {
-            tinyjson::JsonValue::String(x) => output.push_str(&x),
-            tinyjson::JsonValue::Number(x) => {
-                if let Some(ch) = char::from_u32(x as u32) {
-                    output.push(ch)
-                } else {
-                    return Err(String::from("invalid char"));
-                }
-            }
+            tinyjson::JsonValue::String(x) => output.extend(x.chars().map(|x| x as Integer)),
+            tinyjson::JsonValue::Number(x) => output.push(x as Integer),
             _ => return Err(String::from("invalid literal item")),
         }
     }
@@ -240,6 +271,8 @@ fn parse_program_with_string() {
     let input = r#"
 data_str: db "Hallo",0,98
     mov r0 :data_str
+    mov r1 [:data_str]
+    mov r2 [:data_str+1]
     "#;
 
     let program = parse_from_str(input).unwrap();
@@ -248,8 +281,10 @@ data_str: db "Hallo",0,98
     assert_eq!(
         program,
         maplit::btreemap! {
-            1 => (Command::LabelledData(data_str), [Argument::Literal("Hallo\0b".to_string()), Argument::None]),
+            1 => (Command::LabelledData(data_str), [Argument::Literal("Hallo\0b".chars().map(|x| x as Integer).collect()), Argument::None]),
             2 => (Command::Move, [Argument::Register(0), Argument::RawLabel(data_str)]),
+            3 => (Command::Move, [Argument::Register(1), Argument::HeapDeref(data_str, 0)]),
+            4 => (Command::Move, [Argument::Register(2), Argument::HeapDeref(data_str, 1)]),
         }
     );
 }

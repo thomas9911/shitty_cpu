@@ -101,10 +101,11 @@ impl Runtime {
                 match args[0] {
                     Argument::Register(reg) => self.registers.data[reg as usize] = new_value,
                     Argument::HeapRef(heap_id) => {
-                        self.heap
-                            .entry(heap_id)
-                            .and_modify(|p| *p = new_value)
-                            .or_insert(new_value);
+                        // self.heap
+                        //     .entry(heap_id)
+                        //     .and_modify(|p| *p = new_value)
+                        //     .or_insert(new_value);
+                        todo!("move heap");
                     }
                     _ => return Err("Invalid argument".to_string()),
                 }
@@ -191,7 +192,15 @@ impl Runtime {
                     // return Err("Stack underflow".to_string());
                 }
             }
-            Command::LabelledData(_) => {}
+            Command::LabelledData(label) => {
+                let Argument::Literal(value) = &args[0] else {
+                    return Err(String::from("argument can only be literal"));
+                };
+
+                self.label_references
+                    .insert(*label, self.heap.len() as Integer);
+                self.heap.push(value.clone());
+            }
         }
 
         self.program_counter += increase_program_counter as Integer;
@@ -208,8 +217,19 @@ impl Runtime {
             Argument::None => None,
             Argument::Raw(data) => Some(*data),
             Argument::Register(reg_id) => self.registers.data.get(*reg_id as usize).copied(),
-            Argument::HeapRef(ref_id) => Some(*self.heap.get(&ref_id).unwrap()),
-            Argument::RawLabel(_) => None,
+            Argument::HeapRef(ref_id) => Some(*self.label_references.get(&ref_id).unwrap()),
+            Argument::RawLabel(label) => self.label_references.get(label).copied(),
+            Argument::HeapDeref(label, offset) => {
+                let ref_id = self.label_references.get(label).copied();
+                ref_id
+                    .map(|x| {
+                        self.heap
+                            .get(x as usize)
+                            .map(|y| y.get(*offset as usize).copied())
+                    })
+                    .flatten()
+                    .flatten()
+            }
             Argument::Literal(_) => todo!(),
         }
     }
@@ -219,8 +239,19 @@ impl Runtime {
             Argument::None => None,
             Argument::Raw(_data) => None,
             Argument::Register(reg_id) => self.registers.data.get_mut(*reg_id as usize),
-            Argument::HeapRef(ref_id) => self.heap.get_mut(&ref_id),
-            Argument::RawLabel(_) => None,
+            Argument::HeapRef(ref_id) => self.label_references.get_mut(&ref_id),
+            Argument::RawLabel(label) => self.label_references.get_mut(label),
+            Argument::HeapDeref(label, offset) => {
+                let ref_id = self.label_references.get(label).copied();
+                ref_id
+                    .map(|x| {
+                        self.heap
+                            .get_mut(x as usize)
+                            .map(|y| y.get_mut(*offset as usize))
+                    })
+                    .flatten()
+                    .flatten()
+            }
             Argument::Literal(_) => todo!(),
         }
     }
@@ -387,5 +418,27 @@ mod tests {
         rt.run().unwrap();
 
         assert_eq!(805, rt.output());
+    }
+
+    #[test]
+    fn string_literal() {
+        let data_str = 12529907765057034586;
+        let data_str2 = 12529904465057034586;
+
+        let mut rt = Runtime::new(maplit::btreemap! {
+            1 => (Command::LabelledData(data_str), [Argument::Literal("Hallo\0".chars().map(|x| x as Integer).collect()), Argument::None]),
+            2 => (Command::LabelledData(data_str2), [Argument::Literal("Test\0".chars().map(|x| x as Integer).collect()), Argument::None]),
+            3 => (Command::Move, [Argument::Register(1), Argument::RawLabel(data_str)]),
+            4 => (Command::Move, [Argument::Register(0), Argument::RawLabel(data_str2)]),
+            5 => (Command::Move, [Argument::Register(2), Argument::HeapDeref(data_str, 0)]),
+            6 => (Command::Move, [Argument::Register(3), Argument::HeapDeref(data_str, 1)]),
+        });
+
+        rt.run().unwrap();
+
+        assert_eq!(1, rt.registers.data[0]);
+        assert_eq!(0, rt.registers.data[1]);
+        assert_eq!(b'H' as Integer, rt.registers.data[2]);
+        assert_eq!(b'a' as Integer, rt.registers.data[3]);
     }
 }
