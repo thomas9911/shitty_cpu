@@ -1,3 +1,4 @@
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 pub type Error = String;
@@ -10,7 +11,7 @@ pub type RawProgram = Vec<(Integer, RawCommand, RawArgument, RawArgument)>;
 pub type Heap = Vec<Vec<Integer>>;
 pub type Program = BTreeMap<Integer, (Command, [Argument; 2])>;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub enum Command {
     Noop,
     Label,
@@ -36,7 +37,7 @@ pub enum Command {
 
 impl Command {}
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub enum Argument {
     None,
     Raw(Integer),

@@ -2,7 +2,7 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 use std::io::{BufRead, BufReader, Cursor};
 
 use winnow::ascii::{alpha1, dec_uint, space0};
-use winnow::combinator::{alt, delimited, fail, terminated};
+use winnow::combinator::{alt, fail, preceded, terminated};
 use winnow::error::{ContextError, StrContext};
 use winnow::prelude::*;
 use winnow::stream::AsChar;
@@ -138,9 +138,8 @@ fn parse_argument<'s>(input: &mut &'s str) -> PResult<Argument> {
             *input = "";
             arg
         }
-        x if x.starts_with("#") => {
-            let (_, rest) = x.split_once('#').expect("checked # exists");
-            Argument::Raw(rest.parse().unwrap())
+        mut x if x.starts_with("#") => {
+            preceded("#", dec_uint).map(|int| Argument::Raw(int)).parse_next(&mut x)?
         }
         mut x if x.contains(':') => {
             alt((
