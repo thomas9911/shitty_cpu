@@ -109,9 +109,12 @@ fn parse_command<'s>(input: &mut &'s str) -> PResult<Command> {
 }
 
 fn parse_argument<'s>(input: &mut &'s str) -> PResult<Argument> {
-    let argument = match take_while(1.., |c| !AsChar::is_space(c))
-        .context(StrContext::Label("parse argument"))
-        .parse_next(input)?
+    let argument = match alt((
+        ('[', take_while(1.., |c| c != ']') , ']').recognize(),
+        take_while(1.., |c| !AsChar::is_space(c)),
+    ))
+    .context(StrContext::Label("parse argument"))
+    .parse_next(input)?
     {
         "r0" => Argument::Register(0),
         "r1" => Argument::Register(1),
@@ -139,7 +142,7 @@ fn parse_argument<'s>(input: &mut &'s str) -> PResult<Argument> {
             let (_, rest) = x.split_once('#').expect("checked # exists");
             Argument::Raw(rest.parse().unwrap())
         }
-        mut x if x.split_once(':').is_some() => {
+        mut x if x.contains(':') => {
             alt((
                 winnow::seq!(_: (space0::<&str, ContextError>, '[', space0, ':'), take_while(1.., |c| !AsChar::is_space(c) && c != '+'), _: (space0, '+', space0), dec_uint, _: (space0, ']', space0)).map(|(label, offset): (&str, usize)| Argument::HeapDeref(hash_label(label), offset)),
                 winnow::seq!(_: (space0::<&str, ContextError>, '[', space0, ':'), take_while(1.., |c| !AsChar::is_space(c) && c != ']'), _: (space0, ']', space0)).map(|(label, )| Argument::HeapDeref(hash_label(label), 0)),
@@ -267,6 +270,7 @@ data_str: db "Hallo",0,98
     mov r0 :data_str
     mov r1 [:data_str]
     mov r2 [:data_str+1]
+    mov r3 [ :data_str + 2 ]
     "#;
 
     let program = parse_from_str(input).unwrap();
@@ -279,6 +283,7 @@ data_str: db "Hallo",0,98
             2 => (Command::Move, [Argument::Register(0), Argument::RawLabel(data_str)]),
             3 => (Command::Move, [Argument::Register(1), Argument::HeapDeref(data_str, 0)]),
             4 => (Command::Move, [Argument::Register(2), Argument::HeapDeref(data_str, 1)]),
+            5 => (Command::Move, [Argument::Register(3), Argument::HeapDeref(data_str, 2)]),
         }
     );
 }
