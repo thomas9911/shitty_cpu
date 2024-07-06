@@ -44,7 +44,7 @@ pub enum Argument {
     HeapRef(Integer),
     RawLabel(Integer),
     Literal(Vec<Integer>),
-    HeapDeref(Integer, Integer),
+    HeapDeref(Integer, usize),
 }
 
 impl Argument {

@@ -1,5 +1,6 @@
 use shitty_types::{Argument, Command, Error, Heap, Integer, Program};
-use std::{cmp::Ordering, collections::BTreeMap};
+use std::cmp::Ordering;
+use std::collections::BTreeMap;
 
 #[derive(Debug, Clone)]
 pub struct Registers {
