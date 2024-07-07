@@ -12,3 +12,6 @@ shitty_types = { path = "../shitty_types" }
 shitty_runtime = { path = "../shitty_runtime" }
 shitty_file_format = { path = "../shitty_file_format" }
 anyhow = "1.0.86"
+
+[dev-dependencies]
+tempfile = "3.10.1"
