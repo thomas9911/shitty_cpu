@@ -30,6 +30,7 @@ pub struct Runtime {
     heap: Heap,
     stack: Vec<Integer>,
     label_references: BTreeMap<Integer, Integer>,
+    debug: bool,
 }
 
 impl Runtime {
@@ -42,7 +43,13 @@ impl Runtime {
             program_counter: 0,
             label_references: Self::scan_labels(&program),
             program,
+            debug: false,
         }
+    }
+
+    pub fn with_debug(mut self, debug: bool) -> Self {
+        self.debug = debug;
+        self
     }
 
     fn scan_labels(program: &Program) -> BTreeMap<Integer, Integer> {
@@ -85,6 +92,9 @@ impl Runtime {
             .map(|(c, [a1, a2])| (c.clone(), [a1.clone(), a2.clone()]))
         {
             self.apply_command(&command, &args)?;
+            if self.debug {
+                self.print_registers();
+            }
         } else {
             self.program_counter += 1;
         };
@@ -294,6 +304,16 @@ impl Runtime {
         self.flags.overflow = overflow;
 
         Ok(())
+    }
+
+    fn print_registers(&self) {
+        print!("{} => ", self.program_counter);
+        for (index, register) in self.registers.data.iter().enumerate() {
+            if register != &0 {
+                print!("r{}: {}|", index, register);
+            }
+        }
+        println!();
     }
 }
 

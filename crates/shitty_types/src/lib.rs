@@ -8,8 +8,9 @@ pub type RawCommand = u64;
 pub type RawArgument = u64;
 
 pub type RawProgram = Vec<(Integer, RawCommand, RawArgument, RawArgument)>;
-pub type Heap = Vec<Vec<Integer>>;
+pub type Heap = Vec<Literal>;
 pub type Program = BTreeMap<Integer, (Command, [Argument; 2])>;
+pub type Literal = Vec<Integer>;
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -67,7 +68,7 @@ pub enum Argument {
     #[serde(rename = "rlbl")]
     RawLabel(Integer),
     #[serde(rename = "lit")]
-    Literal(Vec<Integer>),
+    Literal(Literal),
     HeapDeref(Integer, usize),
 }
 

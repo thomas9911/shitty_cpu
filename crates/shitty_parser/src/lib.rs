@@ -3,12 +3,12 @@ use std::io::{BufRead, BufReader, Cursor};
 
 use winnow::ascii::{alpha1, dec_uint, space0};
 use winnow::combinator::{alt, fail, preceded, terminated};
-use winnow::error::{ContextError, StrContext};
+use winnow::error::{ContextError, ErrMode, ErrorKind, FromExternalError, StrContext};
 use winnow::prelude::*;
 use winnow::stream::AsChar;
 use winnow::token::{take_till, take_while};
 
-use shitty_types::{Argument, Command, Error, Integer, Program};
+use shitty_types::{Argument, Command, Error, Integer, Literal, Program};
 
 pub fn parse_from_str(input: &str) -> Result<Program, Error> {
     let cursor = Cursor::new(input);
@@ -53,18 +53,14 @@ pub fn parse(input: impl BufRead) -> Result<Program, Error> {
             };
         }
 
-        let arg0 = parse_argument
-            .parse_next(&mut line_str)
-            .map_err(|e| e.to_string())?;
+        let arg0 = parse_argument(&mut line_str, index).map_err(|e| e.to_string())?;
         args[0] = arg0;
 
         line_str = line_str.trim();
         if line_str.is_empty() {
             program.insert(index as Integer, (command, args));
         } else {
-            let arg1 = parse_argument
-                .parse_next(&mut line_str)
-                .map_err(|e| e.to_string())?;
+            let arg1 = parse_argument(&mut line_str, index).map_err(|e| e.to_string())?;
             args[1] = arg1;
             program.insert(index as Integer, (command, args));
         }
@@ -74,7 +70,24 @@ pub fn parse(input: impl BufRead) -> Result<Program, Error> {
 }
 
 fn generic_error(input: &mut &str, label: &'static str) -> PResult<()> {
-    fail.context(StrContext::Label(label)).parse_next(input)
+    // fail.context(StrContext::Label(label)).parse_next(input)
+    Err(ErrMode::Cut(ContextError::from_external_error(
+        input,
+        ErrorKind::Assert,
+        std::io::Error::other(label),
+    )))
+}
+
+fn generic_error_with_error<E: Into<Box<dyn std::error::Error + Send + Sync>>>(
+    input: &mut &str,
+    error: E,
+) -> PResult<()> {
+    // fail.context(StrContext::Label(label)).parse_next(input)
+    Err(ErrMode::Cut(ContextError::from_external_error(
+        input,
+        ErrorKind::Assert,
+        std::io::Error::other(error),
+    )))
 }
 
 fn label_line_parser<'s>(input: &mut &'s str) -> PResult<&'s str> {
@@ -103,12 +116,12 @@ fn parse_command<'s>(input: &mut &'s str) -> PResult<Command> {
         "push" => Command::Push,
         "pop" => Command::Pop,
         "ret" => Command::Return,
-        _ => return Err(generic_error(input, "invalid command").unwrap_err()),
+        x => return Err(generic_error(input, "invalid command").unwrap_err()),
     };
     Ok(command)
 }
 
-fn parse_argument<'s>(input: &mut &'s str) -> PResult<Argument> {
+fn parse_argument<'s>(input: &mut &'s str, line: usize) -> PResult<Argument> {
     let argument = match alt((
         ('[', take_while(1.., |c| c != ']') , ']').recognize(),
         take_while(1.., |c| !AsChar::is_space(c)),
@@ -150,8 +163,8 @@ fn parse_argument<'s>(input: &mut &'s str) -> PResult<Argument> {
             )
             ).parse_next(&mut x)?
         }
-        _ => {
-            return Err(generic_error(input, "invalid argument").unwrap_err());
+        other => {
+            return Err(generic_error_with_error(input, format!("invalid argument: got : `{}` on line: {}", other, line)).unwrap_err());
         }
     };
     Ok(argument)
@@ -164,7 +177,7 @@ fn hash_label(label: &str) -> u64 {
     hash
 }
 
-fn parse_db_literal(input: &mut &str) -> PResult<Vec<Integer>> {
+fn parse_db_literal(input: &mut &str) -> PResult<Literal> {
     let mut output = Vec::new();
     for item in input.split(',') {
         let data: tinyjson::JsonValue = item
@@ -205,7 +218,7 @@ fn parse_simple_program() {
 #[test]
 fn parse_program_with_labels() {
     let input = r#"cmp r0 #10
-    bgr :condition_a
+    bg :condition_a
     mul r0 #5
     b :stop
 condition_a:

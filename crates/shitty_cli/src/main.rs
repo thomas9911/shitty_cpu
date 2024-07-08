@@ -51,6 +51,7 @@ fn help() -> Result<ExitCode, anyhow::Error> {
 fn run(args: &mut Arguments) -> Result<ExitCode, anyhow::Error> {
     let file: Option<PathBuf> = args.opt_value_from_str(["-o", "--open"])?;
     let output_as_status_code = args.contains("--output-as-status-code");
+    let debug = args.contains("--debug");
     let program_text: Option<String> = args.opt_free_from_str()?;
 
     let program = match (file, program_text) {
@@ -66,7 +67,7 @@ fn run(args: &mut Arguments) -> Result<ExitCode, anyhow::Error> {
         }
     };
 
-    let mut rt = shitty_runtime::Runtime::new(program);
+    let mut rt = shitty_runtime::Runtime::new(program).with_debug(debug);
     rt.run().map_err(|e| anyhow::anyhow!("{}", e))?;
 
     if output_as_status_code {
