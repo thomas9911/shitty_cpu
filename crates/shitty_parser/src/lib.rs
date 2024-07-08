@@ -21,7 +21,7 @@ pub fn parse(input: impl BufRead) -> Result<Program, Error> {
     for (index, line) in input.lines().enumerate() {
         let line = line.map_err(|e| e.to_string())?;
         let mut line_str = line.trim();
-        if line_str.is_empty() {
+        if line_str.is_empty() || line_str.starts_with(';') {
             continue;
         }
 
@@ -91,7 +91,7 @@ fn parse_command<'s>(input: &mut &'s str) -> PResult<Command> {
         "sub" => Command::Subtract,
         "mul" => Command::Multiply,
         "div" => Command::Divide,
-        "bgr" => Command::BranchGreater,
+        "bg" => Command::BranchGreater,
         "bge" => Command::BranchGreaterEqual,
         "bl" => Command::BranchLesser,
         "ble" => Command::BranchLesserEqual,
