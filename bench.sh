@@ -1,17 +1,19 @@
 #! /bin/bash
 
+file="./scripts/factorial.s"
 cargo build --release
-./target/release/shitty_cli.exe compile test.s test.bin
+./target/release/shitty_cli compile $file test.bin
 
-program=$(cat test.s)
+echo "$file"
+program=$(cat $file)
 
-./target/release/shitty_cli.exe run -o test.s
-./target/release/shitty_cli.exe exec test.bin
-./target/release/shitty_cli.exe run "$program"
+./target/release/shitty_cli run -o $file
+./target/release/shitty_cli exec test.bin
+./target/release/shitty_cli run "$program"
 
 hyperfine --sort mean-time --warmup 5 --runs 5000 --export-markdown out.md -N \
--n 'run file' './target/release/shitty_cli.exe run -o test.s' \
--n 'run input' "./target/release/shitty_cli.exe run '$program'" \
--n 'exec file' './target/release/shitty_cli.exe exec test.bin' \
+  -n 'run file' "./target/release/shitty_cli run -o $file" \
+  -n 'run input' "./target/release/shitty_cli run '$program'" \
+  -n 'exec file' './target/release/shitty_cli exec test.bin' \
 
 rm test.bin
