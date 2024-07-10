@@ -1,6 +1,9 @@
-use shitty_types::{Argument, Command, Error, Heap, Integer, Program};
+use educe::Educe;
+use shitty_types::{hash_label, Argument, Command, Error, Heap, Integer, Program, Stack};
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
+use std::fmt::Debug;
+use std::num::TryFromIntError;
 
 #[derive(Debug, Clone)]
 pub struct Registers {
@@ -13,6 +16,32 @@ impl Registers {
     }
 }
 
+// type Function<'a> = Box<dyn Fn(&'a mut Heap, &'a mut Registers) -> Result<(), Error>>;
+
+pub trait ExternalFunction: Fn(&mut Heap, &mut Stack) -> Result<(), Error> {
+    fn clone_box<'a>(&self) -> Box<dyn 'a + ExternalFunction>
+    where
+        Self: 'a;
+}
+
+impl<F> ExternalFunction for F
+where
+    F: Fn(&mut Heap, &mut Stack) -> Result<(), Error> + Clone,
+{
+    fn clone_box<'a>(&self) -> Box<dyn 'a + ExternalFunction>
+    where
+        Self: 'a,
+    {
+        Box::new(self.clone())
+    }
+}
+
+impl<'a> Clone for Box<dyn 'a + ExternalFunction> {
+    fn clone(&self) -> Self {
+        (**self).clone_box()
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct Flags {
     equal: bool,
@@ -21,16 +50,50 @@ pub struct Flags {
     overflow: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Educe)]
+#[educe(Debug)]
 pub struct Runtime {
     flags: Flags,
     registers: Registers,
     program_counter: Integer,
     program: Program,
     heap: Heap,
-    stack: Vec<Integer>,
+    stack: Stack,
     label_references: BTreeMap<Integer, Integer>,
+    #[educe(Debug(ignore))]
+    external_functions: BTreeMap<Integer, Box<dyn ExternalFunction>>,
     debug: bool,
+}
+
+pub fn default_external_functions() -> BTreeMap<Integer, Box<dyn ExternalFunction>> {
+    let mut functions = BTreeMap::new();
+
+    let print_function: Box<dyn ExternalFunction> = Box::new(|heap, stack| {
+        if let Some(heap_value) = stack
+            .pop()
+            .map(|heap_id| heap.get(heap_id as usize))
+            .flatten()
+        {
+            if let Ok(string) = decode_heap_binary_to_string(heap_value) {
+                println!("{}", string);
+            } else {
+                println!("Unable to decode heap value");
+            }
+        }
+        Ok(())
+    });
+    functions.insert(hash_label("print"), print_function);
+
+    functions
+}
+
+pub fn decode_heap_binary_to_string(item: &Vec<Integer>) -> Result<String, TryFromIntError> {
+    item.iter().try_fold(String::new(), |mut string, integer| {
+        if let Some(ch) = char::from_u32(u32::try_from(*integer)?) {
+            string.push(ch);
+        }
+        Ok(string)
+    })
 }
 
 impl Runtime {
@@ -42,6 +105,7 @@ impl Runtime {
             stack: Vec::new(),
             program_counter: 0,
             label_references: Self::scan_labels(&program),
+            external_functions: default_external_functions(),
             program,
             debug: false,
         }
@@ -194,6 +258,12 @@ impl Runtime {
             Command::Call => {
                 self.stack.push(self.program_counter);
                 self.brancher(args)?;
+            }
+            Command::Function => {
+                let label = args[0].resolve_label_or_error()?;
+                if let Some(function) = self.external_functions.get(&label) {
+                    function(&mut self.heap, &mut self.stack)?;
+                }
             }
             Command::Return => {
                 if let Some(value) = self.stack.pop() {
@@ -461,5 +531,21 @@ mod tests {
         assert_eq!(0, rt.registers.data[1]);
         assert_eq!(b'H' as Integer, rt.registers.data[2]);
         assert_eq!(b'a' as Integer, rt.registers.data[3]);
+    }
+
+    #[test]
+    fn external_function_call_print() {
+        let print_label = hash_label("print");
+        let data_str = 12529907765057034586;
+
+        let mut rt = Runtime::new(maplit::btreemap! {
+            1 => (Command::LabelledData(data_str), [Argument::Literal("Hallo".chars().map(|x| x as Integer).collect()), Argument::None]),
+            2 => (Command::Push, [Argument::RawLabel(data_str), Argument::None]),
+            3 => (Command::Function, [Argument::RawLabel(print_label), Argument::None])
+        });
+
+        rt.run().unwrap();
+
+        panic!("hallo")
     }
 }

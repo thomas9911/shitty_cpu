@@ -1,4 +1,3 @@
-use std::hash::{DefaultHasher, Hash, Hasher};
 use std::io::{BufRead, BufReader, Cursor};
 
 use winnow::ascii::{alpha1, dec_uint, space0};
@@ -8,7 +7,7 @@ use winnow::prelude::*;
 use winnow::stream::AsChar;
 use winnow::token::{take_till, take_while};
 
-use shitty_types::{Argument, Command, Error, Integer, Literal, Program};
+use shitty_types::{hash_label, Argument, Command, Error, Integer, Literal, Program};
 
 pub fn parse_from_str(input: &str) -> Result<Program, Error> {
     let cursor = Cursor::new(input);
@@ -113,10 +112,11 @@ fn parse_command<'s>(input: &mut &'s str) -> PResult<Command> {
         "b" => Command::Branch,
         "cmp" => Command::Compare,
         "call" => Command::Call,
+        "func" => Command::Function,
         "push" => Command::Push,
         "pop" => Command::Pop,
         "ret" => Command::Return,
-        x => return Err(generic_error(input, "invalid command").unwrap_err()),
+        _ => return Err(generic_error(input, "invalid command").unwrap_err()),
     };
     Ok(command)
 }
@@ -168,13 +168,6 @@ fn parse_argument<'s>(input: &mut &'s str, line: usize) -> PResult<Argument> {
         }
     };
     Ok(argument)
-}
-
-fn hash_label(label: &str) -> u64 {
-    let mut hasher = DefaultHasher::new();
-    label.hash(&mut hasher);
-    let hash = hasher.finish();
-    hash
 }
 
 fn parse_db_literal(input: &mut &str) -> PResult<Literal> {

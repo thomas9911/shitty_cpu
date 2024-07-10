@@ -8,5 +8,11 @@ edition = "2021"
 [dependencies]
 shitty_types = { path = "../shitty_types" }
 
+[dependencies.educe]
+version = "0.6.0"
+features = ["Debug"]
+default-features = false
+
+
 [dev-dependencies]
 maplit = "1.0.2"

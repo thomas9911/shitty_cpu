@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use std::hash::{DefaultHasher, Hash, Hasher};
 
 pub type Error = String;
 
@@ -9,6 +10,7 @@ pub type RawArgument = u64;
 
 pub type RawProgram = Vec<(Integer, RawCommand, RawArgument, RawArgument)>;
 pub type Heap = Vec<Literal>;
+pub type Stack = Vec<Integer>;
 pub type Program = BTreeMap<Integer, (Command, [Argument; 2])>;
 pub type Literal = Vec<Integer>;
 
@@ -50,6 +52,8 @@ pub enum Command {
     Push,
     Pop,
     Call,
+    #[serde(rename = "func")]
+    Function,
     #[serde(rename = "ret")]
     Return,
 }
@@ -84,4 +88,11 @@ impl Argument {
         self.resolve_label()
             .ok_or_else(|| String::from("no valid argument"))
     }
+}
+
+pub fn hash_label(label: &str) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    label.hash(&mut hasher);
+    let hash = hasher.finish();
+    hash
 }
