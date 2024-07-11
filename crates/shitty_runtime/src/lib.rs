@@ -84,6 +84,16 @@ pub fn default_external_functions() -> BTreeMap<Integer, Box<dyn ExternalFunctio
     });
     functions.insert(hash_label("print"), print_function);
 
+    let random_function: Box<dyn ExternalFunction> = Box::new(|_, stack| {
+        let mut buffer = [0; 8];
+        getrandom::getrandom(&mut buffer).map_err(|e| e.to_string())?;
+        let integer = Integer::from_be_bytes(buffer);
+        stack.push(integer);
+
+        Ok(())
+    });
+    functions.insert(hash_label("getrandom"), random_function);
+
     functions
 }
 
@@ -182,6 +192,22 @@ impl Runtime {
                         //     .or_insert(new_value);
                         todo!("move heap");
                     }
+                    Argument::HeapDeref(label, offset) => {
+                        let heap_id = self
+                            .label_references
+                            .get(&label)
+                            .ok_or_else(|| "Invalid argument".to_string())?;
+
+                        if let Some(data) = self.heap.get_mut(*heap_id as usize) {
+                            if offset >= data.len() {
+                                let extra = offset - data.len() + 1;
+                                data.extend(std::iter::repeat(0).take(extra));
+                            }
+                            data[offset] = new_value;
+                        } else {
+                            panic!("heap not found");
+                        }
+                    }
                     _ => return Err("Invalid argument".to_string()),
                 }
             }
@@ -241,7 +267,11 @@ impl Runtime {
                     }
                 }
             }
-            Command::Add | Command::Subtract | Command::Multiply | Command::Divide => {
+            Command::Add
+            | Command::Subtract
+            | Command::Multiply
+            | Command::Divide
+            | Command::Modulo => {
                 self.calculate(command, args)?;
             }
             Command::Push => {
@@ -358,6 +388,7 @@ impl Runtime {
             Command::Subtract => Integer::overflowing_sub,
             Command::Multiply => Integer::overflowing_mul,
             Command::Divide => Integer::overflowing_div,
+            Command::Modulo => Integer::overflowing_rem,
             // Command::Shiftleft => Integer::overflowing_shl,
             // Command::Shiftright => Integer::overflowing_shr,
             _ => return Err("Invalid calculate command".to_string()),
@@ -534,6 +565,26 @@ mod tests {
     }
 
     #[test]
+    fn string_append() {
+        let data_str = 12529907765057034586;
+
+        let mut rt = Runtime::new(maplit::btreemap! {
+            1 => (Command::LabelledData(data_str), [Argument::Literal(Vec::new()), Argument::None]),
+            2 => (Command::Move, [Argument::Register(1), Argument::Raw(1)]),
+            3 => (Command::Move, [Argument::Register(2), Argument::Raw(2)]),
+            4 => (Command::Move, [Argument::Register(3), Argument::Raw(3)]),
+            5 => (Command::Move, [Argument::HeapDeref(data_str, 0), Argument::Register(1)]),
+            6 => (Command::Move, [Argument::HeapDeref(data_str, 1), Argument::Register(2)]),
+            7 => (Command::Move, [Argument::HeapDeref(data_str, 2), Argument::Register(3)]),
+        });
+
+        rt.run().unwrap();
+
+        let heap_id = rt.label_references[&data_str] as usize;
+        assert_eq!(rt.heap[heap_id], vec![1, 2, 3]);
+    }
+
+    #[test]
     fn external_function_call_print() {
         let print_label = hash_label("print");
         let data_str = 12529907765057034586;
@@ -545,7 +596,23 @@ mod tests {
         });
 
         rt.run().unwrap();
+    }
 
-        panic!("hallo")
+    #[test]
+    fn external_function_call_getrandom() {
+        let getrandom_label = hash_label("getrandom");
+
+        let mut rt = Runtime::new(maplit::btreemap! {
+            1 => (Command::Function, [Argument::RawLabel(getrandom_label), Argument::None]),
+            2 => (Command::Pop, [Argument::Register(0), Argument::None]),
+        });
+
+        rt.run().unwrap();
+
+        let output = rt.output();
+
+        assert_ne!(0, output);
+
+        u64::try_from(output).unwrap();
     }
 }

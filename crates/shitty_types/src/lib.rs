@@ -49,6 +49,8 @@ pub enum Command {
     Multiply,
     #[serde(rename = "div")]
     Divide,
+    #[serde(rename = "mod")]
+    Modulo,
     Push,
     Pop,
     Call,

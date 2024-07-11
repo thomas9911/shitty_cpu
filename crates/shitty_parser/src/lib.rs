@@ -103,6 +103,7 @@ fn parse_command<'s>(input: &mut &'s str) -> PResult<Command> {
         "sub" => Command::Subtract,
         "mul" => Command::Multiply,
         "div" => Command::Divide,
+        "mod" => Command::Modulo,
         "bg" => Command::BranchGreater,
         "bge" => Command::BranchGreaterEqual,
         "bl" => Command::BranchLesser,
@@ -289,6 +290,35 @@ data_str: db "Hallo",0,98
             3 => (Command::Move, [Argument::Register(1), Argument::HeapDeref(data_str, 0)]),
             4 => (Command::Move, [Argument::Register(2), Argument::HeapDeref(data_str, 1)]),
             5 => (Command::Move, [Argument::Register(3), Argument::HeapDeref(data_str, 2)]),
+        }
+    );
+}
+
+#[test]
+fn parse_program_with_string2() {
+    let input = r#"
+data_str: db ""
+    mov r1 #1
+    mov r2 #2
+    mov r3 #3
+    mov [:data_str] r1
+    mov [:data_str+1] r2 
+    mov [ :data_str + 2 ] r3 
+    "#;
+
+    let program = parse_from_str(input).unwrap();
+    let data_str = 12529907765057034586;
+
+    assert_eq!(
+        program,
+        maplit::btreemap! {
+            1 => (Command::LabelledData(data_str), [Argument::Literal(Vec::new()), Argument::None]),
+            2 => (Command::Move, [Argument::Register(1), Argument::Raw(1)]),
+            3 => (Command::Move, [Argument::Register(2), Argument::Raw(2)]),
+            4 => (Command::Move, [Argument::Register(3), Argument::Raw(3)]),
+            5 => (Command::Move, [Argument::HeapDeref(data_str, 0), Argument::Register(1)]),
+            6 => (Command::Move, [Argument::HeapDeref(data_str, 1), Argument::Register(2)]),
+            7 => (Command::Move, [Argument::HeapDeref(data_str, 2), Argument::Register(3)]),
         }
     );
 }

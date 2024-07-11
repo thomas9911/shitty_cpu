@@ -6,6 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+getrandom = "0.2.15"
 shitty_types = { path = "../shitty_types" }
 
 [dependencies.educe]
