@@ -1,0 +1,31 @@
+script = { SOI ~ program ~ EOI }
+program = { line* }
+
+line = { function_def | function_call }
+
+function_call = { ident ~ "(" ~ function_call_arguments ~ ")" }
+function_call_arguments = _{ inner_call_function_arguments? }
+inner_call_function_arguments = { expression ~ ("," ~ expression)* }
+
+function_def = { "fn" ~ ident ~ "(" ~ function_arguments ~ ")" ~ "{" ~ block ~ "}" }
+function_arguments = _{ inner_function_arguments? }
+inner_function_arguments = { ident ~ ("," ~ ident)* }
+
+block = { statement+ }
+statement = _{ inner_statement ~ ";" }
+inner_statement = { return_statement | expression }
+expression = { function_call | term }
+term = { ident | integer | string }
+
+ident = { !ASCII_DIGIT ~ (ASCII_ALPHA | ASCII_DIGIT)+ }
+integer = { ASCII_DIGIT+ }
+string = _{ "\"" ~ inner_string ~ "\"" }
+inner_string = { (!"\"" ~ ANY)* }
+
+return_statement = { "return" ~ term }
+
+WHITESPACE = _{ " " | "\t" | NEWLINE }
+COMMENT = _{ multiline_comment | single_line_comment }
+
+multiline_comment = { "/*" ~ (!"*/" ~ ANY)* ~ "*/" }
+single_line_comment = { "//" ~ (!"\n" ~ ANY)* }

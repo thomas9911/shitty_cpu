@@ -1,1 +1,1 @@
-workspace = { members = [ "crates/shitty_cli", "crates/shitty_file_format", "crates/shitty_parser","crates/shitty_runtime", "crates/shitty_types"], resolver = "2" }
+workspace = { members = [ "crates/shitty_cli", "crates/shitty_file_format", "crates/shitty_parser","crates/shitty_runtime", "crates/shitty_script", "crates/shitty_types"], resolver = "2" }
