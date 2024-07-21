@@ -1,7 +1,7 @@
 script = { SOI ~ program ~ EOI }
 program = { line* }
 
-line = { function_def | function_call }
+line = { function_def | function_call | term }
 
 function_call = { ident ~ "(" ~ function_call_arguments ~ ")" }
 function_call_arguments = _{ inner_call_function_arguments? }

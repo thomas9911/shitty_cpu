@@ -1,0 +1,6 @@
+
+
+fmt:
+    cargo +nightly fmt
+
+    

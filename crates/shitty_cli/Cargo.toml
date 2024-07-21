@@ -11,6 +11,7 @@ shitty_parser = { path = "../shitty_parser" }
 shitty_types = { path = "../shitty_types" }
 shitty_runtime = { path = "../shitty_runtime" }
 shitty_file_format = { path = "../shitty_file_format" }
+shitty_script = { path = "../shitty_script" }
 anyhow = "1.0.86"
 
 [dev-dependencies]

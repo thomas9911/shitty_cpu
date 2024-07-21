@@ -1,0 +1,11 @@
+
+fn returnstring() {
+    return "Hello, World!";
+}
+
+fn echo(i) {
+    return i;
+}
+
+echo(1234)
+returnstring()

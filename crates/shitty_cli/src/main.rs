@@ -36,6 +36,7 @@ fn main() -> Result<ExitCode, anyhow::Error> {
         Ok(Some(x)) if x == "run" => run(&mut args),
         Ok(Some(x)) if x == "compile" => compile(&mut args),
         Ok(Some(x)) if x == "exec" => exec(&mut args),
+        Ok(Some(x)) if x == "script" => script(&mut args),
         Ok(Some(x)) if x == "help" => help(),
         _ => {
             anyhow::bail!("Invalid command")
@@ -100,6 +101,28 @@ fn exec(args: &mut Arguments) -> Result<ExitCode, anyhow::Error> {
 
     let file = FileStructure::from_path(file_path).map_err(|e| anyhow::anyhow!("{}", e))?;
     let mut rt = shitty_runtime::Runtime::new(file.program);
+    rt.run().map_err(|e| anyhow::anyhow!("{}", e))?;
+    if output_as_status_code {
+        let status: u8 = rt.output().try_into().context("parsing status code")?;
+        return Ok(ExitCode::from(status));
+    }
+    println!("{}", rt.output());
+    Ok(ExitCode::SUCCESS)
+}
+
+fn script(args: &mut Arguments) -> Result<ExitCode, anyhow::Error> {
+    let output_as_status_code = args.contains("--output-as-status-code");
+    let file_path: PathBuf = args.free_from_str()?;
+
+    // let file = FileStructure::from_path(file_path).map_err(|e| anyhow::anyhow!("{}", e))?;
+    let file = std::fs::read_to_string(file_path)?;
+
+    let mut script = shitty_script::parse(&file).context("parsing script")?;
+    let program = shitty_script::script_to_program(&mut script)?;
+    // dbg!(&program);
+    println!("{}", shitty_types::format_program(&program));
+
+    let mut rt = shitty_runtime::Runtime::new(program).with_debug(true);
     rt.run().map_err(|e| anyhow::anyhow!("{}", e))?;
     if output_as_status_code {
         let status: u8 = rt.output().try_into().context("parsing status code")?;
